@@ -152,7 +152,7 @@ public class CMAESEvolver<S, F> extends AbstractIterativeEvolver<List<Double>, S
     private final double[][] yK = new double[lambda][n];
     private final double[][] xK = new double[lambda][n];
 
-    // Last generation when the eigendecomposition was calculated
+    // Last generation when the eigen decomposition was calculated
     private int lastEigenUpdateGeneration = 0;
 
     public CMAESState() {
@@ -253,11 +253,9 @@ public class CMAESEvolver<S, F> extends AbstractIterativeEvolver<List<Double>, S
     if ((state.getIterations() - cmaesState.lastEigenUpdateGeneration) > (1d / (c1 + cMu) / n / 10d)) {
       eigenDecomposition(cmaesState);
     }
-    // escape flat fitness, or better terminate?
+    // flat fitness case
     if (orderedPopulation.firsts().size() >= Math.ceil(0.7 * lambda)) {
-      double stepSize = (cmaesState).stepSize;
-      stepSize *= Math.exp(0.2 + cSigma / dSigma);
-      (cmaesState).stepSize = stepSize;
+      (cmaesState).stepSize *= Math.exp(0.2 + cSigma / dSigma);
       L.warning("Flat fitness, consider reformulating the objective");
     }
     return samplePopulation(fitnessFunction, random, executor, cmaesState);
