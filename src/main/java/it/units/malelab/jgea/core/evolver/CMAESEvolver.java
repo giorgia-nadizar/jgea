@@ -129,7 +129,7 @@ public class CMAESEvolver<S, F> extends AbstractIterativeEvolver<List<Double>, S
 
   }
 
-  protected class CMAESState extends State {
+  private class CMAESState extends State {
     // Step-size
     private double stepSize = 0.5;
     // Mean value of the search distribution
