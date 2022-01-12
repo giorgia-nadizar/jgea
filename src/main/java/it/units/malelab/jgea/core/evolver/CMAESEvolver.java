@@ -129,22 +129,23 @@ public class CMAESEvolver<S, F> extends AbstractIterativeEvolver<List<Double>, S
     // Step-size
     private double stepSize = 0.5;
     // Mean value of the search distribution
-    private double[] distrMean = new double[n];
+    private double[] distributionMean = new double[n];
     // Evolution path for step-size
-    private double[] sEvolutionPath = new double[n];
+    private double[] sigmaEvolutionPath = new double[n];
     // Evolution path for covariance matrix, a sequence of successive (normalized) steps, the strategy
     // takes over a number of generations
-    private double[] CEvolutionPath = new double[n];
+    private double[] cEvolutionPath = new double[n];
     // Orthogonal matrix. Columns of B are eigenvectors of C with unit length and correspond to the diagonal
     // element of D
+    // Covariance matrix at the current generation
+    private RealMatrix C = MatrixUtils.createRealIdentityMatrix(n);
     private RealMatrix B = MatrixUtils.createRealIdentityMatrix(n);
     // Diagonal matrix. The diagonal elements of D are square roots of eigenvalues of C and correspond to the
     // respective columns of B
     private RealMatrix D = MatrixUtils.createRealIdentityMatrix(n);
-    // Covariance matrix at the current generation
-    private RealMatrix C = MatrixUtils.createRealIdentityMatrix(n);
+
     // Last generation when the eigendecomposition was calculated
-    private int lastEigenUpdate = 0;
+    private int lastEigenUpdateGeneration = 0;
 
     public CMAESState() {
     }
@@ -155,23 +156,23 @@ public class CMAESEvolver<S, F> extends AbstractIterativeEvolver<List<Double>, S
         int fitnessEvaluations,
         long elapsedMillis,
         double stepSize,
-        double[] distrMean,
-        double[] sEvolutionPath,
-        double[] CEvolutionPath,
-        RealMatrix b,
-        RealMatrix d,
-        RealMatrix c,
-        int lastEigenUpdate
+        double[] distributionMean,
+        double[] sigmaEvolutionPath,
+        double[] cEvolutionPath,
+        RealMatrix B,
+        RealMatrix D,
+        RealMatrix C,
+        int lastEigenUpdateGeneration
     ) {
       super(iterations, births, fitnessEvaluations, elapsedMillis);
       this.stepSize = stepSize;
-      this.distrMean = distrMean;
-      this.sEvolutionPath = sEvolutionPath;
-      this.CEvolutionPath = CEvolutionPath;
-      B = b;
-      D = d;
-      C = c;
-      this.lastEigenUpdate = lastEigenUpdate;
+      this.distributionMean = distributionMean;
+      this.sigmaEvolutionPath = sigmaEvolutionPath;
+      this.cEvolutionPath = cEvolutionPath;
+      this.B = B;
+      this.D = D;
+      this.C = C;
+      this.lastEigenUpdateGeneration = lastEigenUpdateGeneration;
     }
 
     @Override
@@ -182,85 +183,22 @@ public class CMAESEvolver<S, F> extends AbstractIterativeEvolver<List<Double>, S
           getFitnessEvaluations(),
           getElapsedMillis(),
           stepSize,
-          Arrays.copyOf(distrMean, distrMean.length),
-          Arrays.copyOf(sEvolutionPath, sEvolutionPath.length),
-          Arrays.copyOf(CEvolutionPath, CEvolutionPath.length),
+          Arrays.copyOf(distributionMean, distributionMean.length),
+          Arrays.copyOf(sigmaEvolutionPath, sigmaEvolutionPath.length),
+          Arrays.copyOf(cEvolutionPath, cEvolutionPath.length),
           B.copy(),
           D.copy(),
           C.copy(),
-          lastEigenUpdate
+          lastEigenUpdateGeneration
       );
     }
 
-    public RealMatrix getB() {
-      return B;
-    }
-
-    public void setB(RealMatrix b) {
-      B = b;
-    }
-
-    public RealMatrix getC() {
-      return C;
-    }
-
-    public void setC(RealMatrix c) {
-      C = c;
-    }
-
-    public double[] getCEvolutionPath() {
-      return CEvolutionPath;
-    }
-
-    public void setCEvolutionPath(double[] CEvolutionPath) {
-      this.CEvolutionPath = CEvolutionPath;
-    }
-
-    public RealMatrix getD() {
-      return D;
-    }
-
-    public void setD(RealMatrix d) {
-      D = d;
-    }
-
-    public double[] getDistrMean() {
-      return distrMean;
-    }
-
-    public void setDistrMean(double[] distrMean) {
-      this.distrMean = distrMean;
-    }
-
-    public int getLastEigenUpdate() {
-      return lastEigenUpdate;
-    }
-
-    public void setLastEigenUpdate(int lastEigenUpdate) {
-      this.lastEigenUpdate = lastEigenUpdate;
-    }
-
-    public double getStepSize() {
-      return stepSize;
-    }
-
-    public void setStepSize(double stepSize) {
-      this.stepSize = stepSize;
-    }
-
-    public double[] getsEvolutionPath() {
-      return sEvolutionPath;
-    }
-
-    public void setsEvolutionPath(double[] sEvolutionPath) {
-      this.sEvolutionPath = sEvolutionPath;
-    }
   }
 
-  protected void eigenDecomposition(CMAESState state) {
+  private void eigenDecomposition(CMAESState state) {
     L.fine(String.format("Eigen decomposition of covariance matrix (i=%d)", state.getIterations()));
-    state.setLastEigenUpdate(state.getIterations());
-    EigenDecomposition eig = new EigenDecomposition(state.getC());
+    state.lastEigenUpdateGeneration = state.getIterations();
+    EigenDecomposition eig = new EigenDecomposition(state.C);
     // normalized eigenvectors
     RealMatrix B = eig.getV();
     RealMatrix D = eig.getD();
@@ -273,8 +211,8 @@ public class CMAESEvolver<S, F> extends AbstractIterativeEvolver<List<Double>, S
       // D contains standard deviations now
       D.setEntry(i, i, Math.sqrt(D.getEntry(i, i)));
     }
-    state.setB(B);
-    state.setD(D);
+    state.B = B;
+    state.D = D;
   }
 
   @Override
@@ -286,7 +224,7 @@ public class CMAESEvolver<S, F> extends AbstractIterativeEvolver<List<Double>, S
   ) throws ExecutionException, InterruptedException {
     // objective variables initial point
     List<Double> point = genotypeFactory.build(1, random).get(0);
-    ((CMAESState) state).setDistrMean(point.stream().mapToDouble(d -> d).toArray());
+    ((CMAESState) state).distributionMean = point.stream().mapToDouble(d -> d).toArray();
     return samplePopulation(fitnessFunction, random, executor, (CMAESState) state);
   }
 
@@ -300,14 +238,14 @@ public class CMAESEvolver<S, F> extends AbstractIterativeEvolver<List<Double>, S
   ) throws ExecutionException, InterruptedException {
     updateDistribution(orderedPopulation, (CMAESState) state);
     // update B and D from C
-    if ((state.getIterations() - ((CMAESState) state).getLastEigenUpdate()) > (1d / (c1 + cMu) / n / 10d)) {
+    if ((state.getIterations() - ((CMAESState) state).lastEigenUpdateGeneration) > (1d / (c1 + cMu) / n / 10d)) {
       eigenDecomposition((CMAESState) state);
     }
     // escape flat fitness, or better terminate?
     if (orderedPopulation.firsts().size() >= Math.ceil(0.7 * lambda)) {
-      double stepSize = ((CMAESState) state).getStepSize();
+      double stepSize = ((CMAESState) state).stepSize;
       stepSize *= Math.exp(0.2 + cSigma / dSigma);
-      ((CMAESState) state).setStepSize(stepSize);
+      ((CMAESState) state).stepSize = stepSize;
       L.warning("Flat fitness, consider reformulating the objective");
     }
     return samplePopulation(fitnessFunction, random, executor, (CMAESState) state);
@@ -334,10 +272,10 @@ public class CMAESEvolver<S, F> extends AbstractIterativeEvolver<List<Double>, S
         arz[i] = random.nextGaussian();
       }
       // y ∼ N (0, C) y = (B*(D*z))
-      double[] ary = state.getB().preMultiply(state.getD().preMultiply(arz));
+      double[] ary = state.B.preMultiply(state.D.preMultiply(arz));
       for (int i = 0; i < n; i++) {
         // add mutation (sigma*B*(D*z))
-        genotype.set(i, state.getDistrMean()[i] + state.getStepSize() * ary[i]);
+        genotype.set(i, state.distributionMean[i] + state.stepSize * ary[i]);
       }
       genotypes.add(genotype);
     }
@@ -355,7 +293,7 @@ public class CMAESEvolver<S, F> extends AbstractIterativeEvolver<List<Double>, S
         .sorted(individualComparator.comparator())
         .limit(mu)
         .toList();
-    double[] distrMean = state.getDistrMean();
+    double[] distrMean = state.distributionMean;
     double[] oldDistrMean = Arrays.copyOf(distrMean, distrMean.length);
     double[] artmp = new double[n];
     // recombination
@@ -364,20 +302,20 @@ public class CMAESEvolver<S, F> extends AbstractIterativeEvolver<List<Double>, S
       for (int j = 0; j < mu; j++) {
         distrMean[i] += weights[j] * bestMuPoints.get(j).genotype().get(i);
       }
-      artmp[i] = (distrMean[i] - oldDistrMean[i]) / state.getStepSize();
+      artmp[i] = (distrMean[i] - oldDistrMean[i]) / state.stepSize;
     }
-    state.setDistrMean(distrMean);
+    state.distributionMean = distrMean;
 
     // (D^-1*B'*(xmean-xold)/sigma)
-    double[] zmean = MatrixUtils.inverse(state.getD()).preMultiply(state.getB().transpose().preMultiply(artmp));
+    double[] zmean = MatrixUtils.inverse(state.D).preMultiply(state.B.transpose().preMultiply(artmp));
 
     // cumulation: update evolution paths
-    double[] Bzmean = state.getB().preMultiply(zmean);
-    double[] sEvolutionPath = state.getsEvolutionPath();
+    double[] Bzmean = state.B.preMultiply(zmean);
+    double[] sEvolutionPath = state.sigmaEvolutionPath;
     for (int i = 0; i < n; i++) {
       sEvolutionPath[i] = (1d - cSigma) * sEvolutionPath[i] + (Math.sqrt(cSigma * (2d - cSigma) * muEff)) * Bzmean[i];
     }
-    state.setsEvolutionPath(sEvolutionPath);
+    state.sigmaEvolutionPath = sEvolutionPath;
 
     // calculate step-size evolution path norm
     double psNorm = 0.0;
@@ -392,13 +330,13 @@ public class CMAESEvolver<S, F> extends AbstractIterativeEvolver<List<Double>, S
       hsig = 1;
     }
 
-    double[] CEvolutionPath = state.getCEvolutionPath();
+    double[] CEvolutionPath = state.cEvolutionPath;
     for (int i = 0; i < n; i++) {
       CEvolutionPath[i] = (1 - cc) * CEvolutionPath[i] + hsig * Math.sqrt(cc * (2 - cc) * muEff) * artmp[i];
     }
-    state.setCEvolutionPath(CEvolutionPath);
+    state.cEvolutionPath = CEvolutionPath;
 
-    RealMatrix C = state.getC();
+    RealMatrix C = state.C;
     // adapt covariance matrix C
     for (int i = 0; i < n; i++) {
       for (int j = 0; j <= i; j++) {
@@ -407,9 +345,9 @@ public class CMAESEvolver<S, F> extends AbstractIterativeEvolver<List<Double>, S
         for (int k = 0; k < mu; k++) {
           rankMuUpdate += weights[k] * ((bestMuPoints.get(k)
               .genotype()
-              .get(i) - oldDistrMean[i]) / state.getStepSize()) * ((bestMuPoints.get(k)
+              .get(i) - oldDistrMean[i]) / state.stepSize) * ((bestMuPoints.get(k)
               .genotype()
-              .get(j) - oldDistrMean[j]) / state.getStepSize());
+              .get(j) - oldDistrMean[j]) / state.stepSize);
         }
         C.setEntry(i, j, (1 - c1 - cMu) * C.getEntry(i, j) + c1 * rankOneUpdate + cMu * rankMuUpdate);
         if (i != j) {
@@ -418,11 +356,11 @@ public class CMAESEvolver<S, F> extends AbstractIterativeEvolver<List<Double>, S
         }
       }
     }
-    state.setC(C);
+    state.C = C;
 
     // adapt step size sigma
-    double stepSize = state.getStepSize();
+    double stepSize = state.stepSize;
     stepSize *= Math.exp((cSigma / dSigma) * ((psNorm / chiN) - 1));
-    state.setStepSize(stepSize);
+    state.stepSize = stepSize;
   }
 }
