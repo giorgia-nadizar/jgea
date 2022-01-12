@@ -293,8 +293,8 @@ public class CMAESEvolver<S, F> extends AbstractIterativeEvolver<List<Double>, S
     double[][] zMu = new double[mu][n];
     for (int i = 0; i < mu; i++) {
       xMu[i] = state.xK[bestMuIndexes[i]];
-      yMu[i] = state.xK[bestMuIndexes[i]];
-      zMu[i] = state.xK[bestMuIndexes[i]];
+      yMu[i] = state.yK[bestMuIndexes[i]];
+      zMu[i] = state.zK[bestMuIndexes[i]];
     }
 
     // selection and recombination
