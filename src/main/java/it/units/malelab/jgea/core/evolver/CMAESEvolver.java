@@ -23,12 +23,16 @@ import org.apache.commons.math3.linear.EigenDecomposition;
 import org.apache.commons.math3.linear.MatrixUtils;
 import org.apache.commons.math3.linear.RealMatrix;
 
-import java.util.*;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.List;
+import java.util.Random;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.function.Function;
 import java.util.logging.Logger;
 import java.util.random.RandomGenerator;
+import java.util.stream.IntStream;
 
 // source -> https://arxiv.org/pdf/1604.00772.pdf
 public class CMAESEvolver<S, F> extends AbstractIterativeEvolver<List<Double>, S, F> {
@@ -144,6 +148,9 @@ public class CMAESEvolver<S, F> extends AbstractIterativeEvolver<List<Double>, S
     // respective columns of B
     private RealMatrix D = MatrixUtils.createRealIdentityMatrix(n);
 
+    private final double[][] zK = new double[lambda][n];
+    private final double[][] yK = new double[lambda][n];
+
     // Last generation when the eigendecomposition was calculated
     private int lastEigenUpdateGeneration = 0;
 
@@ -177,7 +184,7 @@ public class CMAESEvolver<S, F> extends AbstractIterativeEvolver<List<Double>, S
 
     @Override
     public State copy() {
-      return new CMAESState(
+      CMAESState cmaesState = new CMAESState(
           getIterations(),
           getBirths(),
           getFitnessEvaluations(),
@@ -191,28 +198,30 @@ public class CMAESEvolver<S, F> extends AbstractIterativeEvolver<List<Double>, S
           C.copy(),
           lastEigenUpdateGeneration
       );
+      for (int i = 0; i < lambda; i++) {
+        System.arraycopy(zK[i], 0, cmaesState.zK[i], 0, zK[i].length);
+        System.arraycopy(yK[i], 0, cmaesState.yK[i], 0, yK[i].length);
+      }
+      return cmaesState;
     }
 
   }
 
   private void eigenDecomposition(CMAESState state) {
     L.fine(String.format("Eigen decomposition of covariance matrix (i=%d)", state.getIterations()));
-    state.lastEigenUpdateGeneration = state.getIterations();
     EigenDecomposition eig = new EigenDecomposition(state.C);
-    // normalized eigenvectors
     RealMatrix B = eig.getV();
     RealMatrix D = eig.getD();
     for (int i = 0; i < n; i++) {
-      // numerical problem?
       if (D.getEntry(i, i) < 0) {
         L.warning("An eigenvalue has become negative");
         D.setEntry(i, i, 0d);
       }
-      // D contains standard deviations now
       D.setEntry(i, i, Math.sqrt(D.getEntry(i, i)));
     }
     state.B = B;
     state.D = D;
+    state.lastEigenUpdateGeneration = state.getIterations();
   }
 
   @Override
@@ -222,10 +231,10 @@ public class CMAESEvolver<S, F> extends AbstractIterativeEvolver<List<Double>, S
       ExecutorService executor,
       State state
   ) throws ExecutionException, InterruptedException {
-    // objective variables initial point
-    List<Double> point = genotypeFactory.build(1, random).get(0);
-    ((CMAESState) state).distributionMean = point.stream().mapToDouble(d -> d).toArray();
-    return samplePopulation(fitnessFunction, random, executor, (CMAESState) state);
+    CMAESState cmaesState = (CMAESState) state;
+    List<Double> randomGenotype = genotypeFactory.build(1, random).get(0);
+    cmaesState.distributionMean = randomGenotype.stream().mapToDouble(d -> d).toArray();
+    return samplePopulation(fitnessFunction, random, executor, cmaesState);
   }
 
   @Override
@@ -236,19 +245,20 @@ public class CMAESEvolver<S, F> extends AbstractIterativeEvolver<List<Double>, S
       ExecutorService executor,
       State state
   ) throws ExecutionException, InterruptedException {
-    updateDistribution(orderedPopulation, (CMAESState) state);
+    CMAESState cmaesState = (CMAESState) state;
+    updateDistribution(orderedPopulation, cmaesState);
     // update B and D from C
-    if ((state.getIterations() - ((CMAESState) state).lastEigenUpdateGeneration) > (1d / (c1 + cMu) / n / 10d)) {
-      eigenDecomposition((CMAESState) state);
+    if ((state.getIterations() - cmaesState.lastEigenUpdateGeneration) > (1d / (c1 + cMu) / n / 10d)) {
+      eigenDecomposition(cmaesState);
     }
     // escape flat fitness, or better terminate?
     if (orderedPopulation.firsts().size() >= Math.ceil(0.7 * lambda)) {
-      double stepSize = ((CMAESState) state).stepSize;
+      double stepSize = (cmaesState).stepSize;
       stepSize *= Math.exp(0.2 + cSigma / dSigma);
-      ((CMAESState) state).stepSize = stepSize;
+      (cmaesState).stepSize = stepSize;
       L.warning("Flat fitness, consider reformulating the objective");
     }
-    return samplePopulation(fitnessFunction, random, executor, (CMAESState) state);
+    return samplePopulation(fitnessFunction, random, executor, cmaesState);
   }
 
   @Override
@@ -256,33 +266,21 @@ public class CMAESEvolver<S, F> extends AbstractIterativeEvolver<List<Double>, S
     return new CMAESState();
   }
 
-  protected List<Individual<List<Double>, S, F>> samplePopulation(
+  private List<Individual<List<Double>, S, F>> samplePopulation(
       Function<S, F> fitnessFunction,
       RandomGenerator random,
       ExecutorService executor,
       CMAESState state
   ) throws ExecutionException, InterruptedException {
-    List<List<Double>> genotypes = new ArrayList<>();
-    while (genotypes.size() < lambda) {
-      // new point
-      List<Double> genotype = new ArrayList<>(Collections.nCopies(n, 0d));
-      // z ∼ N (0, I) normally distributed vector
-      double[] arz = new double[n];
-      for (int i = 0; i < n; i++) {
-        arz[i] = random.nextGaussian();
-      }
-      // y ∼ N (0, C) y = (B*(D*z))
-      double[] ary = state.B.preMultiply(state.D.preMultiply(arz));
-      for (int i = 0; i < n; i++) {
-        // add mutation (sigma*B*(D*z))
-        genotype.set(i, state.distributionMean[i] + state.stepSize * ary[i]);
-      }
-      genotypes.add(genotype);
-    }
+    List<List<Double>> genotypes = IntStream.range(0, lambda).mapToObj(k -> {
+      state.zK[lambda] = IntStream.range(0, n).mapToDouble(i -> random.nextGaussian()).toArray();
+      state.yK[lambda] = state.B.preMultiply(state.D.preMultiply(state.zK[lambda]));
+      return IntStream.range(0, n).mapToObj(i -> state.distributionMean[i] + state.stepSize * state.yK[lambda][i]).toList();
+    }).toList();
     return AbstractIterativeEvolver.map(genotypes, List.of(), solutionMapper, fitnessFunction, executor, state);
   }
 
-  protected void updateDistribution(
+  private void updateDistribution(
       final PartiallyOrderedCollection<Individual<List<Double>, S, F>> population,
       final CMAESState state
   ) {
