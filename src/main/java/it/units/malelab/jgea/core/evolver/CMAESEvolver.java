@@ -135,7 +135,7 @@ public class CMAESEvolver<S, F> extends AbstractIterativeEvolver<List<Double>, S
     // Mean value of the search distribution
     private double[] distributionMean = new double[n];
     // Evolution path for step-size
-    private double[] sigmaEvolutionPath = new double[n];
+    private double[] sEvolutionPath = new double[n];
     // Evolution path for covariance matrix, a sequence of successive (normalized) steps, the strategy
     // takes over a number of generations
     private double[] cEvolutionPath = new double[n];
@@ -150,6 +150,7 @@ public class CMAESEvolver<S, F> extends AbstractIterativeEvolver<List<Double>, S
 
     private final double[][] zK = new double[lambda][n];
     private final double[][] yK = new double[lambda][n];
+    private final double[][] xK = new double[lambda][n];
 
     // Last generation when the eigendecomposition was calculated
     private int lastEigenUpdateGeneration = 0;
@@ -164,7 +165,7 @@ public class CMAESEvolver<S, F> extends AbstractIterativeEvolver<List<Double>, S
         long elapsedMillis,
         double stepSize,
         double[] distributionMean,
-        double[] sigmaEvolutionPath,
+        double[] sEvolutionPath,
         double[] cEvolutionPath,
         RealMatrix B,
         RealMatrix D,
@@ -174,7 +175,7 @@ public class CMAESEvolver<S, F> extends AbstractIterativeEvolver<List<Double>, S
       super(iterations, births, fitnessEvaluations, elapsedMillis);
       this.stepSize = stepSize;
       this.distributionMean = distributionMean;
-      this.sigmaEvolutionPath = sigmaEvolutionPath;
+      this.sEvolutionPath = sEvolutionPath;
       this.cEvolutionPath = cEvolutionPath;
       this.B = B;
       this.D = D;
@@ -191,7 +192,7 @@ public class CMAESEvolver<S, F> extends AbstractIterativeEvolver<List<Double>, S
           getElapsedMillis(),
           stepSize,
           Arrays.copyOf(distributionMean, distributionMean.length),
-          Arrays.copyOf(sigmaEvolutionPath, sigmaEvolutionPath.length),
+          Arrays.copyOf(sEvolutionPath, sEvolutionPath.length),
           Arrays.copyOf(cEvolutionPath, cEvolutionPath.length),
           B.copy(),
           D.copy(),
@@ -201,6 +202,7 @@ public class CMAESEvolver<S, F> extends AbstractIterativeEvolver<List<Double>, S
       for (int i = 0; i < lambda; i++) {
         System.arraycopy(zK[i], 0, cmaesState.zK[i], 0, zK[i].length);
         System.arraycopy(yK[i], 0, cmaesState.yK[i], 0, yK[i].length);
+        System.arraycopy(xK[i], 0, cmaesState.xK[i], 0, xK[i].length);
       }
       return cmaesState;
     }
@@ -275,90 +277,74 @@ public class CMAESEvolver<S, F> extends AbstractIterativeEvolver<List<Double>, S
     List<List<Double>> genotypes = IntStream.range(0, lambda).mapToObj(k -> {
       state.zK[lambda] = IntStream.range(0, n).mapToDouble(i -> random.nextGaussian()).toArray();
       state.yK[lambda] = state.B.preMultiply(state.D.preMultiply(state.zK[lambda]));
-      return IntStream.range(0, n).mapToObj(i -> state.distributionMean[i] + state.stepSize * state.yK[lambda][i]).toList();
+      state.xK[lambda] = IntStream.range(0, n).mapToDouble(i -> state.distributionMean[i] + state.stepSize * state.yK[lambda][i]).toArray();
+      return Arrays.stream(state.xK[lambda]).boxed().toList();
     }).toList();
     return AbstractIterativeEvolver.map(genotypes, List.of(), solutionMapper, fitnessFunction, executor, state);
   }
 
-  private void updateDistribution(
-      final PartiallyOrderedCollection<Individual<List<Double>, S, F>> population,
-      final CMAESState state
-  ) {
+  private void updateDistribution(final PartiallyOrderedCollection<Individual<List<Double>, S, F>> population, final CMAESState state) {
     // best mu ranked points
-    List<Individual<List<Double>, S, F>> bestMuPoints = population
-        .all()
-        .stream()
-        .sorted(individualComparator.comparator())
-        .limit(mu)
+    List<List<Double>> bestMuGenotypes = population.all().stream()
+        .sorted(individualComparator.comparator()).limit(mu)
+        .map(Individual::genotype)
         .toList();
-    double[] distrMean = state.distributionMean;
-    double[] oldDistrMean = Arrays.copyOf(distrMean, distrMean.length);
-    double[] artmp = new double[n];
-    // recombination
-    for (int i = 0; i < n; i++) {
-      distrMean[i] = 0;
-      for (int j = 0; j < mu; j++) {
-        distrMean[i] += weights[j] * bestMuPoints.get(j).genotype().get(i);
-      }
-      artmp[i] = (distrMean[i] - oldDistrMean[i]) / state.stepSize;
-    }
-    state.distributionMean = distrMean;
-
-    // (D^-1*B'*(xmean-xold)/sigma)
-    double[] zmean = MatrixUtils.inverse(state.D).preMultiply(state.B.transpose().preMultiply(artmp));
-
-    // cumulation: update evolution paths
-    double[] Bzmean = state.B.preMultiply(zmean);
-    double[] sEvolutionPath = state.sigmaEvolutionPath;
-    for (int i = 0; i < n; i++) {
-      sEvolutionPath[i] = (1d - cSigma) * sEvolutionPath[i] + (Math.sqrt(cSigma * (2d - cSigma) * muEff)) * Bzmean[i];
-    }
-    state.sigmaEvolutionPath = sEvolutionPath;
-
-    // calculate step-size evolution path norm
-    double psNorm = 0.0;
-    for (int i = 0; i < n; i++) {
-      psNorm += sEvolutionPath[i] * sEvolutionPath[i];
-    }
-    psNorm = Math.sqrt(psNorm);
-
-    // Heaviside function
-    int hsig = 0;
-    if (psNorm / Math.sqrt(1 - Math.pow((1d - cSigma), 2 * state.getIterations())) / chiN < (1.4 + 2d / (n + 1))) {
-      hsig = 1;
+    int[] bestMuIndexes = bestMuGenotypes.stream().mapToInt(l -> findInArrayOfArrays(l, state.xK)).toArray();
+    double[][] xMu = new double[mu][n];
+    double[][] yMu = new double[mu][n];
+    double[][] zMu = new double[mu][n];
+    for (int i = 0; i < mu; i++) {
+      xMu[i] = state.xK[bestMuIndexes[i]];
+      yMu[i] = state.xK[bestMuIndexes[i]];
+      zMu[i] = state.xK[bestMuIndexes[i]];
     }
 
-    double[] CEvolutionPath = state.cEvolutionPath;
-    for (int i = 0; i < n; i++) {
-      CEvolutionPath[i] = (1 - cc) * CEvolutionPath[i] + hsig * Math.sqrt(cc * (2 - cc) * muEff) * artmp[i];
-    }
-    state.cEvolutionPath = CEvolutionPath;
+    // selection and recombination
+    double[] updatedDistributionMean = IntStream.range(0, n).mapToDouble(j -> IntStream.range(0, mu).mapToDouble(i -> weights[i] * xMu[i][j]).sum()).toArray();
+    double[] yW = IntStream.range(0, n).mapToDouble(j -> (updatedDistributionMean[j] - state.distributionMean[j]) / state.stepSize).toArray();
+    state.distributionMean = updatedDistributionMean;
 
-    RealMatrix C = state.C;
-    // adapt covariance matrix C
-    for (int i = 0; i < n; i++) {
-      for (int j = 0; j <= i; j++) {
-        double rankOneUpdate = CEvolutionPath[i] * CEvolutionPath[j] + (1 - hsig) * cc * (2 - cc) * C.getEntry(i, j);
-        double rankMuUpdate = 0d;
-        for (int k = 0; k < mu; k++) {
-          rankMuUpdate += weights[k] * ((bestMuPoints.get(k)
-              .genotype()
-              .get(i) - oldDistrMean[i]) / state.stepSize) * ((bestMuPoints.get(k)
-              .genotype()
-              .get(j) - oldDistrMean[j]) / state.stepSize);
-        }
-        C.setEntry(i, j, (1 - c1 - cMu) * C.getEntry(i, j) + c1 * rankOneUpdate + cMu * rankMuUpdate);
-        if (i != j) {
-          // force symmetric matrix
-          C.setEntry(j, i, C.getEntry(i, j));
-        }
-      }
-    }
-    state.C = C;
+    // step size control
+    double[] zM = IntStream.range(0, n).mapToDouble(j -> IntStream.range(0, mu).mapToDouble(i -> weights[i] * zMu[i][j]).sum()).toArray();
+    double[] bzM = state.B.preMultiply(zM);
+    state.sEvolutionPath = IntStream.range(0, n).mapToDouble(i -> (1d - cSigma) * state.sEvolutionPath[i] + (Math.sqrt(cSigma * (2d - cSigma) * muEff)) * bzM[i]).toArray();
+    double psNorm = Math.sqrt(Arrays.stream(state.sEvolutionPath).map(d -> d * d).sum());
+    state.stepSize *= Math.exp((cSigma / dSigma) * ((psNorm / chiN) - 1));
 
-    // adapt step size sigma
-    double stepSize = state.stepSize;
-    stepSize *= Math.exp((cSigma / dSigma) * ((psNorm / chiN) - 1));
-    state.stepSize = stepSize;
+    // covariance matrix adaptation
+    int hSigma = psNorm / Math.sqrt(1 - Math.pow((1d - cSigma), 2 * state.getIterations())) / chiN < (1.4 + 2d / (n + 1)) ? 1 : 0;
+    state.cEvolutionPath = IntStream.range(0, n).mapToDouble(i -> (1 - cc) * state.cEvolutionPath[i] + hSigma * Math.sqrt(cc * (2 - cc) * muEff) * yW[i]).toArray();
+    double deltaH = (1 - hSigma) * cc * (2 - cc);
+    IntStream.range(0, n).forEach(i -> IntStream.range(0, i + 1).forEach(j -> {
+      double cij = (1 + c1 * deltaH - c1 - cMu) * state.C.getEntry(i, j) +
+          c1 * state.cEvolutionPath[i] * state.cEvolutionPath[j] +
+          cMu * IntStream.range(0, mu).mapToDouble(k -> weights[k] * yMu[k][i] * yMu[k][j]).sum();
+      state.C.setEntry(i, j, cij);
+      state.C.setEntry(j, i, cij);
+    }));
+
   }
+
+  private static int findInArrayOfArrays(List<Double> l, double[][] arrays) {
+    for (int i = 0; i < arrays.length; i++) {
+      if (genotypeEquals(l, arrays[i])) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  private static boolean genotypeEquals(List<Double> l, double[] d) {
+    for (int i = 0; i < l.size(); i++) {
+      if (!doubleEquals(l.get(i), d[i])) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private static boolean doubleEquals(double d1, double d2) {
+    return Math.abs(d1 - d2) < 0.0001;
+  }
+
 }
