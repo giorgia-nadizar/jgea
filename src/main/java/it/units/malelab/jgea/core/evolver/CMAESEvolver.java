@@ -23,10 +23,7 @@ import org.apache.commons.math3.linear.EigenDecomposition;
 import org.apache.commons.math3.linear.MatrixUtils;
 import org.apache.commons.math3.linear.RealMatrix;
 
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.List;
-import java.util.Random;
+import java.util.*;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.function.Function;
@@ -151,6 +148,7 @@ public class CMAESEvolver<S, F> extends AbstractIterativeEvolver<List<Double>, S
     private final double[][] zK = new double[lambda][n];
     private final double[][] yK = new double[lambda][n];
     private final double[][] xK = new double[lambda][n];
+    private List<Individual<List<Double>, S, F>> individuals;
 
     // Last generation when the eigen decomposition was calculated
     private int lastEigenUpdateGeneration = 0;
@@ -204,6 +202,7 @@ public class CMAESEvolver<S, F> extends AbstractIterativeEvolver<List<Double>, S
         System.arraycopy(yK[i], 0, cmaesState.yK[i], 0, yK[i].length);
         System.arraycopy(xK[i], 0, cmaesState.xK[i], 0, xK[i].length);
       }
+      cmaesState.individuals = new ArrayList<>(individuals);
       return cmaesState;
     }
 
@@ -278,17 +277,19 @@ public class CMAESEvolver<S, F> extends AbstractIterativeEvolver<List<Double>, S
       state.xK[lambda] = IntStream.range(0, n).mapToDouble(i -> state.distributionMean[i] + state.stepSize * state.yK[lambda][i]).toArray();
       return Arrays.stream(state.xK[lambda]).boxed().toList();
     }).toList();
-    return AbstractIterativeEvolver.map(genotypes, List.of(), solutionMapper, fitnessFunction, executor, state);
+    List<Individual<List<Double>, S, F>> individuals = AbstractIterativeEvolver.map(genotypes, List.of(), solutionMapper, fitnessFunction, executor, state);
+    state.individuals = individuals.stream().limit(genotypes.size()).toList();
+    return individuals;
   }
 
   private void updateDistribution(final PartiallyOrderedCollection<Individual<List<Double>, S, F>> population, final CMAESState state) {
     // best mu ranked points
-    List<List<Double>> bestMuGenotypes = population.all().stream()
-        .sorted(individualComparator.comparator()).limit(mu)
-        .map(Individual::genotype)
-        .toList();
-    // TODO find more efficient way of implementing this, maybe through annotated individuals
-    int[] bestMuIndexes = bestMuGenotypes.stream().mapToInt(l -> findInArrayOfArrays(l, state.xK)).toArray();
+    Function<Integer, Individual<List<Double>, S, F>> mapper = i -> state.individuals.get(i);
+    Comparator<Integer> comparator = individualComparator.comparing(mapper).comparator();
+    int[] bestMuIndexes = IntStream.range(0, lambda).boxed()
+        .sorted(comparator).limit(mu)
+        .mapToInt(i -> i).toArray();
+
     double[][] xMu = new double[mu][n];
     double[][] yMu = new double[mu][n];
     double[][] zMu = new double[mu][n];
@@ -322,28 +323,6 @@ public class CMAESEvolver<S, F> extends AbstractIterativeEvolver<List<Double>, S
       state.C.setEntry(j, i, cij);
     }));
 
-  }
-
-  private static int findInArrayOfArrays(List<Double> l, double[][] arrays) {
-    for (int i = 0; i < arrays.length; i++) {
-      if (genotypeEquals(l, arrays[i])) {
-        return i;
-      }
-    }
-    return -1;
-  }
-
-  private static boolean genotypeEquals(List<Double> l, double[] d) {
-    for (int i = 0; i < l.size(); i++) {
-      if (!doubleEquals(l.get(i), d[i])) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  private static boolean doubleEquals(double d1, double d2) {
-    return Math.abs(d1 - d2) < 0.0001;
   }
 
 }
