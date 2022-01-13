@@ -287,6 +287,7 @@ public class CMAESEvolver<S, F> extends AbstractIterativeEvolver<List<Double>, S
         .sorted(individualComparator.comparator()).limit(mu)
         .map(Individual::genotype)
         .toList();
+    // TODO find more efficient way of implementing this, maybe through annotated individuals
     int[] bestMuIndexes = bestMuGenotypes.stream().mapToInt(l -> findInArrayOfArrays(l, state.xK)).toArray();
     double[][] xMu = new double[mu][n];
     double[][] yMu = new double[mu][n];
