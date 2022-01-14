@@ -272,10 +272,10 @@ public class CMAESEvolver<S, F> extends AbstractIterativeEvolver<List<Double>, S
       CMAESState state
   ) throws ExecutionException, InterruptedException {
     List<List<Double>> genotypes = IntStream.range(0, lambda).mapToObj(k -> {
-      state.zK[lambda] = IntStream.range(0, n).mapToDouble(i -> random.nextGaussian()).toArray();
-      state.yK[lambda] = state.B.preMultiply(state.D.preMultiply(state.zK[lambda]));
-      state.xK[lambda] = IntStream.range(0, n).mapToDouble(i -> state.distributionMean[i] + state.stepSize * state.yK[lambda][i]).toArray();
-      return Arrays.stream(state.xK[lambda]).boxed().toList();
+      state.zK[k] = IntStream.range(0, n).mapToDouble(i -> random.nextGaussian()).toArray();
+      state.yK[k] = state.B.preMultiply(state.D.preMultiply(state.zK[k]));
+      state.xK[k] = IntStream.range(0, n).mapToDouble(i -> state.distributionMean[i] + state.stepSize * state.yK[k][i]).toArray();
+      return Arrays.stream(state.xK[k]).boxed().toList();
     }).toList();
     List<Individual<List<Double>, S, F>> individuals = AbstractIterativeEvolver.map(genotypes, List.of(), solutionMapper, fitnessFunction, executor, state);
     state.individuals = individuals.stream().limit(genotypes.size()).toList();
