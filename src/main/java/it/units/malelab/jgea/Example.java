@@ -104,10 +104,10 @@ public class Example extends Worker {
   public void run() {
     //runLinearPoints();
     //runOneMax();
-    runSymbolicRegression();
+    //runSymbolicRegression();
     //runSymbolicRegressionMO();
     //runGrammarBasedParity();
-    //runSphere();
+    runSphere();
     //runRastrigin();
   }
 
@@ -323,30 +323,37 @@ public class Example extends Worker {
     Random r = new Random(1);
     Problem<List<Double>, Double> p = new Sphere();
     List<Evolver<List<Double>, List<Double>, Double>> evolvers = List.of(new StandardEvolver<>(
-        Function.identity(),
-        new FixedLengthListFactory<>(10, new UniformDoubleFactory(-10, 10)),
-        PartialComparator.from(Double.class).comparing(Evolver.Individual::fitness),
-        100,
-        Map.of(new GeometricCrossover(Range.open(-1d, 2d)).andThen(new GaussianMutation(0.01)), 1d),
-        new Tournament(5),
-        new Last(),
-        100,
-        true,
-        false
-    ), new CMAESEvolver<>(
-        Function.identity(),
-        new FixedLengthListFactory<>(10, new UniformDoubleFactory(-10, 10)),
-        PartialComparator.from(Double.class).comparing(Evolver.Individual::fitness)
-    ), new BasicEvolutionaryStrategy<>(
-        Function.identity(),
-        new FixedLengthListFactory<>(10, new UniformDoubleFactory(-10, 10)),
-        PartialComparator.from(Double.class).comparing(Evolver.Individual::fitness),
-        0.1d,
-        100,
-        25,
-        1,
-        false
-    ));
+            Function.identity(),
+            new FixedLengthListFactory<>(10, new UniformDoubleFactory(-10, 10)),
+            PartialComparator.from(Double.class).comparing(Evolver.Individual::fitness),
+            100,
+            Map.of(new GeometricCrossover(Range.open(-1d, 2d)).andThen(new GaussianMutation(0.01)), 1d),
+            new Tournament(5),
+            new Last(),
+            100,
+            true,
+            false
+        ), new CMAESEvolver<>(
+            Function.identity(),
+            new FixedLengthListFactory<>(10, new UniformDoubleFactory(-10, 10)),
+            PartialComparator.from(Double.class).comparing(Evolver.Individual::fitness)
+        ), new BasicEvolutionaryStrategy<>(
+            Function.identity(),
+            new FixedLengthListFactory<>(10, new UniformDoubleFactory(-10, 10)),
+            PartialComparator.from(Double.class).comparing(Evolver.Individual::fitness),
+            0.1d,
+            100,
+            25,
+            1,
+            false
+        ), new OpenAiES<>(
+            Function.identity(),
+            new FixedLengthListFactory<>(10, new UniformDoubleFactory(-10, 10)),
+            PartialComparator.from(Double.class).comparing(Evolver.Individual::fitness),
+            100,
+            0.1
+        )
+    );
     for (Evolver<List<Double>, List<Double>, Double> evolver : evolvers) {
       System.out.println(evolver.getClass().getSimpleName());
       try {

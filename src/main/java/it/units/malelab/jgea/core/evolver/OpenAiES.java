@@ -7,6 +7,7 @@ import it.units.malelab.jgea.core.order.PartiallyOrderedCollection;
 import it.units.malelab.jgea.core.util.AdamOptimizer;
 import it.units.malelab.jgea.representation.sequence.numeric.GaussianMutation;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
@@ -19,13 +20,13 @@ import java.util.stream.IntStream;
 // https://github.com/snolfi/evorobotpy2/blob/master/bin/openaies.py
 // https://bacrobotics.com/Chapter6.html
 
-public class OpenAiES<S> extends AbstractIterativeEvolver<List<Double>, S, Double> {
+public class OpenAiES<S,F> extends AbstractIterativeEvolver<List<Double>, S, F> {
 
   private final int lambda;
   private final double sigma;
   private final Mutation<List<Double>> mutation;
 
-  public OpenAiES(Function<? super List<Double>, ? extends S> solutionMapper, Factory<? extends List<Double>> genotypeFactory, PartialComparator<? super Individual<List<Double>, S, Double>> individualComparator, int lambda, double sigma) {
+  public OpenAiES(Function<? super List<Double>, ? extends S> solutionMapper, Factory<? extends List<Double>> genotypeFactory, PartialComparator<? super Individual<List<Double>, S, F>> individualComparator, int lambda, double sigma) {
     super(solutionMapper, genotypeFactory, individualComparator);
     this.sigma = sigma;
     this.lambda = lambda;
@@ -36,7 +37,8 @@ public class OpenAiES<S> extends AbstractIterativeEvolver<List<Double>, S, Doubl
 
     List<Double> centralGenotype;
     final double[][] noise = new double[lambda][];
-    final double[] fitnessValues = new double[2 * lambda];
+    private List<Individual<List<Double>, S, F>> individuals;
+
     final AdamOptimizer adam;
 
     public OpenAiEsState() {
@@ -50,8 +52,8 @@ public class OpenAiES<S> extends AbstractIterativeEvolver<List<Double>, S, Doubl
     }
 
     private double[] estimateGradient() {
-      Function<Integer, Double> function = i -> fitnessValues[i];
-      Comparator<Integer> comparator = Comparator.comparing(function).reversed();
+      Function<Integer, Individual<List<Double>, S, F>> mapper = i -> individuals.get(i);
+      Comparator<Integer> comparator = individualComparator.comparing(mapper).comparator();
       List<Double> normalizedRanks = IntStream.range(0, 2 * lambda).boxed().sorted(comparator)
           .map(d -> (double) d / (2 * lambda - 1) - 0.5).toList();
       List<Double> u = IntStream.range(0, lambda)
@@ -74,7 +76,7 @@ public class OpenAiES<S> extends AbstractIterativeEvolver<List<Double>, S, Doubl
       for (int i = 0; i < lambda; i++) {
         System.arraycopy(noise[i], 0, openAiEsState.noise[i], 0, noise[i].length);
       }
-      System.arraycopy(fitnessValues, 0, openAiEsState.fitnessValues, 0, fitnessValues.length);
+      openAiEsState.individuals = new ArrayList<>(individuals);
       return openAiEsState;
     }
   }
@@ -85,37 +87,34 @@ public class OpenAiES<S> extends AbstractIterativeEvolver<List<Double>, S, Doubl
   }
 
   @Override
-  protected Collection<Individual<List<Double>, S, Double>> initPopulation(Function<S, Double> fitnessFunction, RandomGenerator random, ExecutorService executor, State state) throws ExecutionException, InterruptedException {
+  protected Collection<Individual<List<Double>, S, F>> initPopulation(Function<S, F> fitnessFunction, RandomGenerator random, ExecutorService executor, State state) throws ExecutionException, InterruptedException {
     OpenAiEsState openAiEsState = (OpenAiEsState) state;
     openAiEsState.centralGenotype = genotypeFactory.build(1, random).get(0);
     return updateDistribution(fitnessFunction, random, executor, openAiEsState);
   }
 
-  private Collection<Individual<List<Double>, S, Double>> updateDistribution(
-      Function<S, Double> fitnessFunction,
+  private Collection<Individual<List<Double>, S, F>> updateDistribution(
+      Function<S, F> fitnessFunction,
       RandomGenerator random,
       ExecutorService executor, OpenAiEsState state) throws ExecutionException, InterruptedException {
     List<Double> zeroList = IntStream.range(0, state.centralGenotype.size()).mapToObj(i -> 0d).toList();
     IntStream.range(0, lambda).forEach(i ->
         state.noise[i] = mutation.mutate(zeroList, random).stream().mapToDouble(d -> d).toArray()
     );
-    List<List<Double>> mutatedGenotypes = IntStream.range(0, lambda).mapToObj(i ->
+    List<List<Double>> mutatedGenotypes = new ArrayList<>(IntStream.range(0, lambda).mapToObj(i ->
         IntStream.range(0, state.centralGenotype.size()).mapToObj(d -> state.centralGenotype.get(d) + sigma * state.noise[i][d]).toList()
-    ).toList();
+    ).toList());
     mutatedGenotypes.addAll(IntStream.range(0, lambda).mapToObj(i ->
         IntStream.range(0, state.centralGenotype.size()).mapToObj(d -> state.centralGenotype.get(d) - sigma * state.noise[i][d]).toList()
     ).toList());
     mutatedGenotypes.add(state.centralGenotype);
-    List<Individual<List<Double>, S, Double>> individuals = AbstractIterativeEvolver.map(mutatedGenotypes, List.of(), solutionMapper, fitnessFunction, executor, state);
-    IntStream.range(0, lambda).forEach(i -> {
-      state.fitnessValues[i] = individuals.get(i).fitness();
-      state.fitnessValues[i + lambda] = individuals.get(i + lambda).fitness();
-    });
+    List<Individual<List<Double>, S, F>> individuals = AbstractIterativeEvolver.map(mutatedGenotypes, List.of(), solutionMapper, fitnessFunction, executor, state);
+    state.individuals = individuals.stream().limit(2L * lambda).toList();
     return individuals;
   }
 
   @Override
-  protected Collection<Individual<List<Double>, S, Double>> updatePopulation(PartiallyOrderedCollection<Individual<List<Double>, S, Double>> orderedPopulation, Function<S, Double> fitnessFunction, RandomGenerator random, ExecutorService executor, State state) throws ExecutionException, InterruptedException {
+  protected Collection<Individual<List<Double>, S, F>> updatePopulation(PartiallyOrderedCollection<Individual<List<Double>, S, F>> orderedPopulation, Function<S, F> fitnessFunction, RandomGenerator random, ExecutorService executor, State state) throws ExecutionException, InterruptedException {
     OpenAiEsState openAiEsState = (OpenAiEsState) state;
     double[] optimizedGradient = openAiEsState.adam.optimizeStep(openAiEsState.estimateGradient());
     openAiEsState.centralGenotype = IntStream.range(0, openAiEsState.centralGenotype.size()).mapToObj(i ->
