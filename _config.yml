@@ -1,5 +1,7 @@
 remote_theme: just-the-docs/just-the-docs
 
+title: JGEA
+
 # Aux links for the upper right navigation
 aux_links:
   "JGEA on GitHub":
