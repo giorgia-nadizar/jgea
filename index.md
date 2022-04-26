@@ -9,7 +9,6 @@ permalink: index
 # Overview
 {: .no_toc }
 
-## Abstract
 We present the Java General Evolutionary Algorithm (JGEA) framework, a modular Java framework for experimenting with Evolutionary Computation (EC).
 We designed JGEA to be 
 1. aimed at providing a general interface to potentially all Evolutionary Algorithms (EAs), yet
