@@ -2,9 +2,11 @@
 layout: default
 title: Introduction
 nav_order: 2
+has_children: false
+permalink: introduction
 ---
 
-# Customization
+# Introduction
 {: .no_toc }
 
 Whenever researchers approach the field of Evolutionary Computation (EC), they soon come across the struggle of choosing a software system to experiment with.
