@@ -19,3 +19,12 @@ Here, we detail the general structure of JGEA, focusing on its high-level compon
 To complete the picture, we illustrate the application of JGEA for solving a real world problem, from its formal definition in the framework to the saving and processing of results.
 The source code of JGEA is available at [https://github.com/ericmedvet/jgea](https://github.com/ericmedvet/jgea).
 
+If you use JGEA please cite our paper:
+```
+@inproceedings{medvet2022jgea,
+  title={JGEA: a Modular Java Framework for Experimenting with Evolutionary Computation},
+  author={Medvet, Eric and Nadizar, Giorgia and Manzoni, Luca},
+  booktitle={Proceedings of the genetic and evolutionary computation conference companion},
+  year={2022}
+}
+```
