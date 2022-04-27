@@ -3,8 +3,6 @@ layout: default
 title: Solver
 parent: Structure and components
 nav_order: 2
-header-includes:
-  - \usepackage[ruled,vlined,linesnumbered]{algorithm2e}
 ---
 
 # Solver
@@ -29,25 +27,3 @@ In fact, population-based optimization methods are naturally suited for exploiti
 
 We designed the ``solve()`` method of the ``Solver`` interface in order to model the stateless nature of the solver with respect to its capability, i.e., to solve problems.
 Namely, since both the ``RandomGenerator`` and the ``ExecutorService`` are provided (besides the problem itself) when ``solve()`` is invoked, different problems may in principle be solved at the same time by the same instance of the solver.
-
-Going more in details, we recall that all relevant EAs share an iterative structure, as the one sketched in \Cref{alg:EA}.
-We translate it into the \lstinline{solve()} method of the \lstinline{IterativeSolver} interface. 
-\begin{algorithm}[H]
-\DontPrintSemicolon
-\SetAlgoLined
-\KwResult{Write here the result}
-\SetKwInOut{Input}{Input}\SetKwInOut{Output}{Output}
-\Input{Write here the input}
-\Output{Write here the output}
-\BlankLine
-\While{While condition}{
-    instructions\;
-    \eIf{condition}{
-        instructions1\;
-        instructions2\;
-    }{
-        instructions3\;
-    }
-}
-\caption{While loop with If/Else condition}
-\end{algorithm} 
