@@ -110,7 +110,7 @@ Collection<Robot> solutions = solver.solve(
 ```
 
 Finally, we remark that oftentimes users are interested in performing multiple optimizations, to ensure the generality of their results, regardless of randomness.
-To this extent, the following code can be used to perform \num{10} optimizations, printing all the necessary information on the same CSV file.
+To this extent, the following code can be used to perform 10 optimizations, printing all the necessary information on the same CSV file.
 ```java
 Solver solver = new SimpleEvolutionaryStrategy(/*...*/);
 ListenerFactory listenerFactory = new CSVPrinter<>(/*...*/);
@@ -140,7 +140,7 @@ We consider the evolutionary robotics setting previously described, in which the
 We employ the aforementioned ES, with a population size of _n_<sub>pop</sub>=36.
 We emulate the resources constraints by limiting the amount of available threads to _n<sub>t</sub>_, and the maximum wall time to _t<sub>c</sub>_ (we set the maximum wall time as termination criterion).
 We experiment with _n<sub>t</sub>_ ∈ {1,2,4,9,18,36} and _t<sub>c</sub>_=30 min.
-We perform the evaluation on a \num{18} core workstation (Intel Xeon Processor W-2295 \SIrange{3.0}{4.6}{\giga\hertz} with \SI{64}{\giga\byte} DDR4 RAM running OpenJDK 17 on Ubuntu 21.10).
+We perform the evaluation on a 18 core workstation (Intel Xeon Processor W-2295 3.0-4.6 GHz with 64 GB DDR4 RAM running OpenJDK 17 on Ubuntu 21.10).
 Since _n<sub>t</sub>_ is always smaller than the amount of available cores, considering hyper-threading, the threads can constantly execute in parallel.
 Since this is only an illustrative experiment we perform one execution for each value of _n<sub>t</sub>_, but we remark that normally a user would execute their evaluations multiple time due to randomness.
 
