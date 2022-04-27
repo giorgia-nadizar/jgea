@@ -3,7 +3,7 @@ layout: default
 title: Why JGEA?
 nav_order: 2
 has_children: false
-permalink: introduction
+permalink: why
 ---
 
 # Why JGEA?
