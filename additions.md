@@ -17,9 +17,9 @@ Our choice fell on ME since it is a quality-diversity algorithm, so it slightly 
 
 The first necessary step towards the inclusion of ME in JGEA encompasses a formal definition of the EA, either in natural language, or, preferably, in the form of a pseudo-code.
 Here, to avoid ambiguities, we consider the situation in which the formalization occurs in pseudo-code, we report it in algorithm 2, but for the sake of clarity, we also provide a brief comment of the code.
-The algorithm is initialized with the creation of an empty feature map <span class="mi" id="MathJax-Span-113" style="font-family: MathJax_Caligraphic;">M</span>, that is filled with at most _n_<sub>pop</sub> individuals.
-Then, as long as the termination condition is not satisfied, _n_<sub>pop</sub> new individuals are created in batch, by mutating randomly selected parents, and added to the map <span class="mi" id="MathJax-Span-113" style="font-family: MathJax_Caligraphic;">M</span>.
-Finally, the solutions are extracted from the map <span class="mi" id="MathJax-Span-113" style="font-family: MathJax_Caligraphic;">M</span> and returned.
+The algorithm is initialized with the creation of an empty feature map <span class="mi" id="MathJax-Span-113" style="font-family: MathJax_Caligraphic;">**M**</span>, that is filled with at most _n_<sub>pop</sub> individuals.
+Then, as long as the termination condition is not satisfied, _n_<sub>pop</sub> new individuals are created in batch, by mutating randomly selected parents, and added to the map <span class="mi" id="MathJax-Span-113" style="font-family: MathJax_Caligraphic;">**M**</span>.
+Finally, the solutions are extracted from the map <span class="mi" id="MathJax-Span-113" style="font-family: MathJax_Caligraphic;">**M**</span> and returned.
 
 | ![algorithm2](img/alg2.png) | 
 |:--:| 
@@ -33,8 +33,8 @@ init-update-terminate structure, and this phase is meant for re-framing them.
 
 Then, once the high-level correspondence between pseudo-code and code has been drawn, the researcher needs to start designing the actual ``MapElites`` class.
 This phase starts from the signature of the class, where the researcher is inevitably forced to make a decision concerning the allowed values for the generics parameters, ``T``, ``P``, ``G``, ``S``, and ``Q``.
-While ME does not pose specific constraints on neither ``P``, ``G``, ``S``, nor ``Q``, its state ``T`` is required to store additional data besides the usual elements of the ``POSetPopulationState``, that is the feature map <span class="mi" id="MathJax-Span-113" style="font-family: MathJax_Caligraphic;">M</span>.
-Therefore, the research needs to define a custom state, possibly within the ``MapElites`` class, extending the ``POSetPopulationState``, where to store a data structure accounting for <span class="mi" id="MathJax-Span-113" style="font-family: MathJax_Caligraphic;">M</span>, that is ``MapOfElites``.
+While ME does not pose specific constraints on neither ``P``, ``G``, ``S``, nor ``Q``, its state ``T`` is required to store additional data besides the usual elements of the ``POSetPopulationState``, that is the feature map <span class="mi" id="MathJax-Span-113" style="font-family: MathJax_Caligraphic;">**M**</span>.
+Therefore, the research needs to define a custom state, possibly within the ``MapElites`` class, extending the ``POSetPopulationState``, where to store a data structure accounting for <span class="mi" id="MathJax-Span-113" style="font-family: MathJax_Caligraphic;">**M**</span>, that is ``MapOfElites``.
 ```java
 public static class State<G, S, Q> extends POSetPopulationState<G, S, Q> {
   private final MapOfElites<Individual<G, S, Q>> mapOfElites;
@@ -69,7 +69,7 @@ public void update(P problem, RandomGenerator random, ExecutorService executor, 
   state.updateElapsedMillis();
 }
 ```
-The content of ``update()`` slavishly follows the prescriptions of algorithm 2, with the only addition that the individuals of the ``MapOfElites`` <span class="mi" id="MathJax-Span-113" style="font-family: MathJax_Caligraphic;">M</span> are doubled in the ``DAGPartiallyOrderedCollection`` of the state to allow the usage of ready-made functions monitoring the population from there.
+The content of ``update()`` slavishly follows the prescriptions of algorithm 2, with the only addition that the individuals of the ``MapOfElites`` <span class="mi" id="MathJax-Span-113" style="font-family: MathJax_Caligraphic;">**M**</span> are doubled in the ``DAGPartiallyOrderedCollection`` of the state to allow the usage of ready-made functions monitoring the population from there.
 
 In conclusion, we observe that adding new EAs to JGEA is quite straight-forward.
 In addition, we remark that the implementation process can help researchers to frame their EA in a more understandable manner.
